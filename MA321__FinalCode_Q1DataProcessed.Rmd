@@ -1,0 +1,281 @@
+MA317 Q1 Inthiran and Rahul
+Description of data and many data processing steps.
+
+```{r}
+
+
+#install.packages('tidyr')
+#install.packages("mice")
+#install.packages("naniar")
+#install.packages("ggplot2")
+library(ggplot2)
+library(naniar)
+library(tidyr)
+library(dplyr)
+library(purrr)
+library(mice)
+library(caret)
+options(scipen=999)  #display decimal values, rather than scientific notation
+
+#"The first processing step is to convert the categorical variables from the type - character'- to the type - 'factor'. This is done by setting stringsAsFactors = TRUE when the data is loaded"
+    
+data <- read.csv("D:/Classes/4. MA321 Stats/Group Project/MA321_Group_coursework-20220305/house-data.csv", header=T, stringsAsFactors=TRUE)
+
+str(data)
+
+# Identify variables with NEAR ZERO VARIANCE. This problem arises because a very high proportion of observations in a column have the same value.
+# This is important because Mean square error is inversely proportional to variance. So near zero variances give larege errors.
+
+#dim(data)
+
+data[data==""] <- NA
+nzv_vals <- nearZeroVar(data, saveMetrics = TRUE)
+#dim(nzv_vals)
+
+nzv_sorted <- arrange(nzv_vals, desc(freqRatio))
+head(nzv_sorted)
+
+#nzv = near zero variance.
+
+#DROP 14 COLUMNS
+#The output indicates that 6 variables have near zero variances. We will drop these columns. In addition we drop columns where the number of #observations in any level exceed 90% of the total observations in the column. This also applies to columns where NA meets that criterion. On this #basis, there are 8 additional columns to be dropped and these are: "MiscFeatures", "PoolQC", "PavedDrive", "GarageCondition", "Functional", "Heating", #"BsmtCond" and"Alley". 14 columns are dropped in total. We doublecheck column names and their index.
+
+data_drop<-data %>% select(-6,-42,-29,-4,-10,-17,-45,-43,-41,-40,-36,-26,-24,-5)
+
+
+#REPLACE NA IN "Fence" WITH "None" because NA here means 'no fence'
+
+data_drop<-data_drop %>% mutate(Fence = ifelse(is.na(Fence), "None", Fence))
+table(data_drop$Fence)
+
+#Define the factors which are ordinal, ie, those that have a natural ranking and change Python's alphabetic ranking to specifying rank from lowest to #highest
+
+data_drop$OverallQual<-factor(data_drop$OverallQual,levels=c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10),ordered = TRUE, exclude = NULL) 
+#results<-table(data_drop$OverallQual)
+#results
+
+data_drop$OverallCond<-factor(data_drop$OverallCond, levels=c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10),ordered = TRUE, exclude = NULL) 
+#results<-table(data_drop$OverallCond)
+#results
+
+data_drop$ExterQual<-factor(data_drop$ExterQual,levels=c("Fa", "TA", "Gd", "Ex"),ordered = TRUE, exclude = NULL)  
+#results<-table(data_drop$ExterQual)
+#results
+
+data_drop$ExterCond<-factor(data_drop$ExterCond, levels=c("Po","TA", "Gd", "Ex"),ordered = TRUE, exclude = NULL)         
+#results<-table(data_drop$ExterCond)
+#results
+
+data_drop$BsmtQual<-factor(data_drop$BsmtQual,levels=c("Fa", "TA", "Gd", "Ex"),ordered = TRUE, exclude = NULL) 
+#results<-table(data_drop$BsmtQual)
+#results
+
+data_drop$KitchenQual<-factor(data_drop$KitchenQual,levels=c("Fa", "TA", "Gd", "Ex"),ordered = TRUE, exclude = NULL)           
+#results<-table(data_drop$KitchenQual)
+#results
+
+data_drop$Fence<-factor(data_drop$Fence,levels=c("None","4", "2", "3", "1"), ordered = TRUE, exclude = NULL)      
+results<-table(data_drop$Fence)
+results
+
+#MAKE A COPY OF DATA_DROP
+data<-data_drop
+
+#CREATE NEW 'AGE' COLUMN BY SUBTRACTING YEARBUILT FROM YEAR OF SALE OF HOUSE
+
+data_age<-data %>% mutate(Age <- YrSold-YearBuilt)
+data_new<-rename(data_age, Age = "Age <- YrSold - YearBuilt")
+
+#CREATE NEW MARKET CRISIS COLUMN "MktCrisis"
+
+data<-data_new %>% mutate(Calc <- (MoSold/12+YrSold)-2009.1)
+data_newcol<-rename(data, MktCrisis = "Calc <- (MoSold/12 + YrSold) - 2009.1")
+
+#DROP THE 3 DATE COLUMNS IN THE ORIGINAL DATASET BECAUSE OF THEIR CONVERSION TO 2 NEW COLUMNS
+
+data_newcol$YearBuilt <- data_newcol$MoSold <- data_newcol$YrSold <- NULL
+data_clean <- data_newcol
+str(data_clean)
+
+#SAVE ALL THE CHANGES TO THE ORIGINAL DATASET TO THE NEW DATASET "data_clean"
+#save(data_clean, file = "C:/Users/Inthiran Moodley/OneDrive/Documents/Essex University/Academic/2021/MA321_/Assignments/Assignment2/data_clean.Rdata")
+
+```
+
+write.csv command
+
+```{r}
+write.csv(data_clean,file="data_clean_MI.csv")
+
+########Rahul's Code#####################
+
+load(file = "C:/Essex uni - assignments/321 - Assignment/data_clean.Rdata")
+```
+
+Counting the missing values in the each column.
+
+```{r}
+na_count1 <- sapply(data_clean, function(x) sum(length(which(is.na(x)))))
+na_count1
+```
+Visualization
+```{r}
+#install.packages("tidyr")
+#install.packages("dplyr")
+#library(tidyr)
+#library(dplyr)
+#library(purrr)
+data_clean %>% keep(is.numeric) %>%   #plot of histograms for all variables
+  gather() %>% 
+  ggplot(aes(value)) +
+  facet_wrap(~ key, scales = "free") +
+  geom_histogram(color= "blue", fill = "blue")
+```
+Relationship of missing values with in the columns
+
+```{r}
+#install.packages("naniar")
+#install.packages("ggplot2")
+#library(ggplot2)
+#library(naniar)
+gg_miss_upset(data_clean) #Relationship of missing values within the columns
+vis_miss(data_clean)
+gg_miss_case(data_clean) 
+gg_miss_var(data_clean, show_pct = TRUE)
+gg_miss_var(data_clean)
+gg_miss_fct(x = data_clean, fct = SalePrice)  #Shows the number of missing in each col
+gg_miss_case_cumsum(data_clean) #Cumulative of missing values
+gg_miss_which(data_clean) #Column without Missing variable is the black one
+ggplot(data_clean) + aes(x = SalePrice) + geom_histogram(binwidth = 10, color= "blue", fill = "blue" )
+```
+
+Scatter Plots of the various predictor variables with the response varable SalePrice.
+```{r}
+#Using log value of SalePrice instead of direct SalePrice since its a big value.
+ggplot(data_clean, aes(OverallQual,log(SalePrice))) + geom_point() +xlab("Overall Quality ") + ylab("SalesPrice")
+ggplot(data_clean, aes(OverallCond,log(SalePrice))) + geom_point() +xlab("Overall Condition ") +
+ylab("SalesPrice")
+ggplot(data_clean, aes(LotFrontage,log(SalePrice))) + geom_point() +xlab("Frontage ") +
+ylab("SalesPrice")
+ggplot(data_clean, aes(LotArea,log(SalePrice))) + geom_point() +xlab("Area") +
+ylab("SalesPrice")
+##ggplot(data_clean, aes(LotArea,log(SalePrice))) + geom_miss_point()
+ggplot(data_clean, aes(MasVnrArea,log(SalePrice))) + geom_point() +xlab("MasVnrArea") +
+ylab("SalesPrice")
+ggplot(data_clean, aes(TotalBsmtSF,log(SalePrice))) + geom_point() +xlab("TotalBsmtSF") +
+ylab("SalesPrice")
+ggplot(data_clean, aes(X1stFlrSF,log(SalePrice))) + geom_point() +xlab("X1stFlrSF") +
+ylab("SalesPrice")
+ggplot(data_clean, aes(X2ndFlrSF,log(SalePrice))) + geom_point() +xlab("X2ndFlrSF") +
+ylab("SalesPrice")
+ggplot(data_clean, aes(GrLivArea,log(SalePrice))) + geom_point() +xlab("GrLivArea") +
+ylab("SalesPrice")
+ggplot(data_clean, aes(FullBath,log(SalePrice))) + geom_point() +xlab("FullBath") +
+ylab("SalesPrice")
+ggplot(data_clean, aes(BedroomAbvGr,log(SalePrice))) + geom_point() +xlab("BedroomAbvGr") +
+ylab("SalesPrice")
+ggplot(data_clean, aes(KitchenAbvGr,log(SalePrice))) + geom_point() +xlab("KitchenAbvGr") +
+ylab("SalesPrice")
+ggplot(data_clean, aes(TotRmsAbvGrd,log(SalePrice))) + geom_point() +xlab("TotalRmsAbvGrd") +
+ylab("SalesPrice")
+ggplot(data_clean, aes(Fireplaces,log(SalePrice))) + geom_point() +xlab("Fireplaces") +
+ylab("SalesPrice")
+ggplot(data_clean, aes(GarageArea,log(SalePrice))) + geom_point() +xlab("GarageArea") +
+ylab("SalesPrice")
+ggplot(data_clean, aes(MiscVal,log(SalePrice))) + geom_point() +xlab("MiscVal") +
+ylab("SalesPrice")
+ggplot(data_clean, aes(Age,log(SalePrice))) + geom_point() +xlab("Age") +
+ylab("SalesPrice")
+ggplot(data_clean, aes(MktCrisis,log(SalePrice))) + geom_point() +xlab("MktCrisis") +
+ylab("SalesPrice")
+
+```
+Treating missing values
+```{r}
+#install.packages("mice")
+#library(mice)
+p <- function(x) {sum(is.na(x))/length(x)*100}
+apply(data_clean, 2, p)
+md.pairs(data_clean)
+md.pattern(data_clean, plot = T)
+
+imputations <- mice(data_clean, seed = 23884, method = "cart", m=10)
+head(imputations)
+n_miss(imputations) #Checking whether the number of missing values is zero after imputation.
+#Impute2 <- complete(imputations, 2)
+#print(Impute2)
+#Impute10 <- complete(imputations, 10)
+#print(Impute10)
+new_data_clean <- complete(imputations)
+View(new_data_clean)
+head(new_data_clean, 10)
+imputations$imp
+stripplot(imputations, pch = 20, cex = 1.2)
+xyplot(imputations, OverallQual ~ log(SalePrice) | .imp, pch = 20, cex = 1.4)
+
+#Save the new_data_clean data-set.
+save(new_data_clean, file = "D:/Classes/4. MA321 Stats/Group Project/MA321_Group_coursework-20220305/new_data_clean.Rdata")
+
+#write.csv(new_data_clean,file="data_clean_MI.csv")
+```
+
+Estimate a linear regression model for the response "Sale Price" with the predictor variables.
+
+```{r}
+#Estimate a linear model with sales price as response variable and other variables as predictor variables.
+lm1<-lm(log(SalePrice)~LotFrontage+LotArea+OverallQual+OverallCond+MasVnrArea+TotalBsmtSF+X1stFlrSF+X2ndFlrSF+GrLivArea+FullBath+BedroomAbvGr+KitchenAbvGr+Fireplaces+GarageArea+MiscVal+Age+MktCrisis,data=new_data_clean)
+summary(lm1)
+#Find the standard residuals of the linear model lm1
+stresidual_lm1<-rstandard(lm1)
+#Plot the standard residuals against the fitted values of the linear model lm1.
+plot(lm1$fitted.values,stresidual_lm1,pch=16,ylab="Standard Residuals",xlab="Fitted Values",ylim=c(-20,20),main="Standard Residuals Vs Fitted Values") +
+abline(h=0) +
+abline(h=5,lty=2) +
+abline(h=-5,lty=2) 
+#QQ-plot for the linear model (lm1)
+qqnorm(stresidual_lm1, ylab="Standardized Residuals",xlab="Normal Scores", main="QQ Plot for lm1" )
+qqline(stresidual_lm1)
+plot(lm1) #Alternative way to get the above plots.
+```
+
+```{r}
+
+#2(b)
+#Descision Tree method 
+
+library(dplyr)
+library(ggplot2)
+library(rpart.plot)
+library(rpart)
+
+Data_DecTree <- read.csv(file = "D:/Classes/4. MA321 Stats/Group Project/MA321_Group_coursework-20220305/new_data_clean.csv", header = TRUE)
+
+glimpse(Data_DecTree)
+
+Data_DecTree<- Data_DecTree %>%
+  mutate(OverallCond = factor((OverallCond,levels = c(1,2,3,4,5,6,7,8,9,10),
+                               labels = c("Poor", "Poor", "Poor", "Average","Average", "Average", "Good", "Good", "Good", "Good"))))
+
+glimpse(Data_DecTree)
+
+
+Data_DecTree <- Data_DecTree %>%
+  select (c(OverallCond,
+            Age, RoofStyle, RoofMatl, Exterior1st, ExterCond, Foundation, BsmtCond, GarageCond, SalePrice))
+
+
+
+         
+
+         
+         
+
+
+
+
+
+
+
+
+```
+
